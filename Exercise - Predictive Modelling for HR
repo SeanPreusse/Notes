@@ -1,0 +1,255 @@
+---
+layout: post
+title:  "Predicting Employee Turnover"
+date:   2016-01-28 00:00:00
+author: Sean Preusse
+categories: ["Machine Learning"]
+--tags:	""
+--cover:  "image here"
+---
+
+What do you think of when you hear predictive and HR in the same sentence? Some of you may be sceptical and ask what is a coefficient and how does this relate to a random forest and run for the hills? Others may believe that such problems will only exist for Finance and the Marketing department as these are the key areas where we can extract true value from the numbers?
+
+Employee retention of emerging leadership, high performing employees and critical roles is a no brainer but we often do not have enough information on this group and we tend to rely on gut instinct when creating strategies to improve regretted loss or business continuity. The cost impact of doing nothing can be significant and in the millions for an organisation that has ~5000 employees. 
+
+What if we could run some analytics at a cost of $2-5k to better understand drivers and see an immediate RIO? This article is more of a tutorial on free tools that you can download to get you started in your analytics journey.
+
+
+
+
+
+
+This article is split into three main components; Data, Discovery and Modelling.
+
+Part 1 - Data
+
+We are dealing with employee data and you should be able to tap into a master record employee report with a whole bunch of columns and numbers. This is a good starting point.
+
+With this data, how many variables actually make sense when building a predictive model. Here are some of my favourite variables.
+
+This is a mini project split into three components; Data, Discovery and Modelling. 
+
+
+
+
+Predicting employee turnover and having a greater understanding of key drivers is starting to emerge in a few organisations. Some people may have a gut feeling when an employee is on the verge of leaving but what if you could create a dataset with many different behaviour identifiers to predict turnover early so that you could intervene? Here we will use Logistic regression to complete this analytical task.
+
+Logistic regression has a place for many practical business problems. My experience with this type of modelling is in the prediction of a binary outcome e.g. predicting employee turnover (yes/no), employees stress, employee performance and employee sentiment.
+
+The example here will look at predicting employee turnover. The accuracy of this model is 86% and can be improved. Data used is supplied from IBM Watson, workforce attrition dataset.
+
+### Load required packages
+
+```{r}
+# Required Packages
+library(ROCR)
+library(caret)
+```
+
+### Data
+
+This data has been sourced from IBM Watson Analytic. THe predictive model that we will build will look at the probability of an employee learning the organisation.
+'https://community.watsonanalytics.com/hr-employee-attrition/'
+
+```{r}
+library(RCurl)
+url <- getURL("https://raw.githubusercontent.com/SeanPreusse/seanpreusse.github.io/master/assets/data/attrition.csv")
+data <- read.csv(text = url)
+data_model <- data[,sapply(data, is.numeric)]
+data_model$outcome <- data$Attrition
+```
+
+### Create Training Sets
+
+```{r}
+smp_size <- floor(0.75 * nrow(data_model))
+set.seed(123)
+train_ind <- sample(seq_len(nrow(data_model)), size = smp_size)
+train <- data_model[train_ind, ]
+test <- data_model[-train_ind, ]
+```
+
+### Model Build
+
+```{r}
+model <- glm(outcome ~., family=binomial(link='logit'),data=train)
+summary(model)
+```
+
+### Model Reduce
+
+```{r}
+model_reduced <- step(model, trace=0)
+summary(model_reduced)
+# Reduction of one variable, great!
+```
+
+### Model Prediction
+
+```{r}
+test$predict <- predict(model_reduced, newdata=test, type="response")
+summary(test$predict)
+```
+
+#### Output
+
+```{r}
+##     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+## 0.001922 0.049840 0.124300 0.170500 0.252400 0.744200
+```
+
+### Model Effectiveness, Chart 1 - ROC Curve
+
+```{r}
+# First Step
+pred <- prediction(test$predict, test$outcome)
+# ROC CUrve Chart 1
+perf = performance(pred, measure = "tpr", x.measure = "fpr")
+plot(perf, colorize=T,lwd=3)
+abline(a=0, b= 1)
+```
+
+
+```{r}
+# ROC CUrve Chart 2
+perf <- performance(pred, "prec", "rec")
+plot(perf, colorize=T,lwd=3)
+```
+
+
+```{r}
+# ROC CUrve Chart 3
+perf <- performance(pred, "tpr", "fpr")
+plot(perf, avg='threshold', spread.estimate='stddev', colorize=T,lwd=3)
+```
+
+
+```{r}
+# ROC CUrve Chart 4
+perf <- performance(pred, "cal",window.size=50)
+plot(perf)
+```
+
+
+```{r}
+# ROC CUrve Chart 5
+perf <- performance(pred, "acc")
+plot(perf, avg= "vertical", spread.estimate="boxplot", show.spread.at= seq(0.1, 0.9, by=0.1),lwd=2)
+```
+
+
+```{r}
+# ROC CUrve Chart 6
+perf <- performance(pred,"pcmiss","lift")
+plot(perf, colorize=T, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(1.2,1.2), avg="threshold", lwd=3)
+```
+
+
+### Optimal cutoff
+
+```{r}
+acc.perf = performance(pred, measure = "acc")
+plot(acc.perf)
+```
+
+
+### Matrix and Plot with cut-off
+
+```{r}
+# Test will full
+library(caret)
+library(e1071)
+pred_cutoff <- factor(ifelse(test$predict > .1, "Yes", "No"))
+confusionMatrix(pred_cutoff, test$outcome)
+```
+
+#### Output
+
+```{r}
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction  No Yes
+##        No  148   8
+##        Yes 158  54
+##                                           
+##                Accuracy : 0.5489          
+##                  95% CI : (0.4965, 0.6005)
+##     No Information Rate : 0.8315          
+##     P-Value [Acc > NIR] : 1               
+##                                           
+##                   Kappa : 0.1805          
+##  Mcnemar's Test P-Value : <2e-16          
+##                                           
+##             Sensitivity : 0.4837          
+##             Specificity : 0.8710          
+##          Pos Pred Value : 0.9487          
+##          Neg Pred Value : 0.2547          
+##              Prevalence : 0.8315          
+##          Detection Rate : 0.4022          
+##    Detection Prevalence : 0.4239          
+##       Balanced Accuracy : 0.6773          
+##                                           
+##        'Positive' Class : No              
+## 
+```
+
+### Cutoff Test
+
+```{r}
+pred_cutoff <- factor(ifelse(test$predict > 0.4, "Yes", "No"))
+confusionMatrix(pred_cutoff, test$outcome)
+```
+
+#### Output
+
+```{r}
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction  No Yes
+##        No  293  39
+##        Yes  13  23
+##                                           
+##                Accuracy : 0.8587          
+##                  95% CI : (0.8189, 0.8926)
+##     No Information Rate : 0.8315          
+##     P-Value [Acc > NIR] : 0.0907709       
+##                                           
+##                   Kappa : 0.3944          
+##  Mcnemar's Test P-Value : 0.0005265       
+##                                           
+##             Sensitivity : 0.9575          
+##             Specificity : 0.3710          
+##          Pos Pred Value : 0.8825          
+##          Neg Pred Value : 0.6389          
+##              Prevalence : 0.8315          
+##          Detection Rate : 0.7962          
+##    Detection Prevalence : 0.9022          
+##       Balanced Accuracy : 0.6642          
+##                                           
+##        'Positive' Class : No              
+## 
+```
+
+
+#### Plot results
+
+```{r}
+pROC = function(pred, fpr.stop){
+    perf <- performance(pred,"tpr","fpr")
+    for (iperf in seq_along(perf@x.values)){
+        ind = which(perf@x.values[[iperf]] <= fpr.stop)
+        perf@y.values[[iperf]] = perf@y.values[[iperf]][ind]
+        perf@x.values[[iperf]] = perf@x.values[[iperf]][ind]
+    }
+    return(perf)
+}
+proc.perf = pROC(pred, fpr.stop=0.4)
+plot(proc.perf, colorize=T,lwd=3, main="ROC Curve - True Positive Rate")
+abline(a=0, b= 1)
+```
+
+For a cut-off of .4 (we only want to target highest probability) we get an accuracy of 85%. The coloured line represents much better than average 'the black line'
+
+
